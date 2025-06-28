@@ -9,6 +9,17 @@ const http = require('http');
 
 const authRoutes = require('./routes/authRoutes');
 const userRoutes = require('./routes/userRoutes');
+const testimonialRoutes = require('./routes/home/testimonialRoutes');
+const slideRoutes = require('./routes/home/slideRoutes');
+const collectionRoutes = require('./routes/home/collectionRoutes');
+const bagRoutes = require('./routes/bagRoutes');
+const checkoutRoutes = require('./routes/checkoutRoutes')
+const shippingRoutes = require('./routes/shippingRoutes')
+
+
+const adminRoutes = require('./routes/adminRoutes');
+
+// Importing the requireAuth middleware for protected routes
 const { requireAuth } = require('./controllers/authController');
 
 const app = express();
@@ -22,6 +33,9 @@ app.use(rateLimit({
   message: 'Too many requests, please try again later.'
 }));
 
+app.use(express.json({ limit: '5mb' }));
+app.use(express.urlencoded({ limit: '5mb', extended: true }));
+
 // -- CORS + body parsers --
 app.use(cors({
   origin: process.env.FRONTEND_ORIGIN || 'http://localhost:3000',
@@ -33,6 +47,15 @@ app.use(express.urlencoded({ extended: true }));
 // -- Mount Auth Routes --
 app.use('/api/auth', authRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/testimonials', testimonialRoutes);
+app.use('/api/slides', slideRoutes);
+app.use('/api/collections', collectionRoutes);
+app.use('/api/bag-collections', bagRoutes);
+app.use('/api/shipping', shippingRoutes);
+app.use('/api/checkout', checkoutRoutes);
+
+
+app.use('/api/admin', adminRoutes);
 
 // -- Example Protected Route --
 app.get('/api/protected', requireAuth, (req, res) => {
