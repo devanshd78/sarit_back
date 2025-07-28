@@ -12,12 +12,16 @@ const AddressSchema = new mongoose.Schema({
 
 const UserSchema = new mongoose.Schema({
   // PHASE 1: only these two are required at signup
-  email:   { type: String, unique: true, sparse: true, lowercase: true, trim: true },
-  mobile:  { type: String, unique: true, sparse: true, trim: true },
+  email:      { type: String, unique: true, sparse: true, lowercase: true, trim: true },
+  mobile:     { type: String, unique: true, sparse: true, trim: true },
+
+  // OTP authentication fields
+  otp:         { type: String, trim: true },
+  otpExpires:  { type: Date },
 
   // PHASE 2: added later
-  username: { type: String, trim: true, default: '' },
-  address:  { type: AddressSchema, default: {} },
+  username:   { type: String, trim: true, default: '' },
+  address:    { type: AddressSchema, default: {} },
 }, { timestamps: true });
 
 module.exports = mongoose.model('User', UserSchema);

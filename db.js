@@ -11,11 +11,6 @@ if (!MONGODB_URI) {
 let cachedClient = null;
 let cachedDb     = null;
 
-/**
- * Connects to MongoDB Atlas and re-uses the same client on
- * subsequent calls. Always returns the database named in
- * DB_NAME (defaults to “sarit”).
- */
 
 async function connectToDatabase() {
   if (cachedClient && cachedDb) {

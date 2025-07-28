@@ -15,7 +15,8 @@ const collectionRoutes = require('./routes/home/collectionRoutes');
 const bagRoutes = require('./routes/bagRoutes');
 const checkoutRoutes = require('./routes/checkoutRoutes')
 const shippingRoutes = require('./routes/shippingRoutes')
-
+const contactRoutes = require('./routes/contactRoutes')
+const couponRoutes = require('./routes/couponRoutes')
 
 const adminRoutes = require('./routes/adminRoutes');
 
@@ -53,7 +54,8 @@ app.use('/api/collections', collectionRoutes);
 app.use('/api/bag-collections', bagRoutes);
 app.use('/api/shipping', shippingRoutes);
 app.use('/api/checkout', checkoutRoutes);
-
+app.use('/api/contact',contactRoutes)
+app.use('/api/coupons',couponRoutes)
 
 app.use('/api/admin', adminRoutes);
 
