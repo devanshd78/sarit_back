@@ -17,7 +17,8 @@ const checkoutRoutes = require('./routes/checkoutRoutes')
 const shippingRoutes = require('./routes/shippingRoutes')
 const contactRoutes = require('./routes/contactRoutes')
 const couponRoutes = require('./routes/couponRoutes')
-
+const stateCityRoutes = require('./routes/stateCityRoutes');
+const newsLetterRoutes = require('./routes/home/newsLetterRoutes');
 const adminRoutes = require('./routes/adminRoutes');
 
 // Importing the requireAuth middleware for protected routes
@@ -56,6 +57,9 @@ app.use('/api/shipping', shippingRoutes);
 app.use('/api/checkout', checkoutRoutes);
 app.use('/api/contact',contactRoutes)
 app.use('/api/coupons',couponRoutes)
+app.use('/api/state', stateCityRoutes)
+app.use('/api/newsLetter', newsLetterRoutes)
+
 
 app.use('/api/admin', adminRoutes);
 

@@ -57,7 +57,7 @@ exports.getAll = async (req, res) => {
         reviews: o.reviews || 0,
         deliveryCharge: o.deliveryCharge,
         quantity: o.quantity || 1,
-
+        isBestSeller: o.isBestSeller,
         // new fields
         dimensions: o.dimensions || {},
         weight: o.weight || {},
@@ -167,10 +167,10 @@ exports.create = async (req, res) => {
 
     // Basic validation
     if (!title?.trim() ||
-        !bagName?.trim() ||
-        !description?.trim() ||
-        !href?.trim() ||
-        !['1', '2'].includes(type)
+      !bagName?.trim() ||
+      !description?.trim() ||
+      !href?.trim() ||
+      !['1', '2'].includes(type)
     ) {
       return res.status(400).json({ success: false, message: 'Missing or invalid fields.' });
     }
@@ -185,9 +185,10 @@ exports.create = async (req, res) => {
     const parsedReviews = parseInt(reviews, 10);
     const parsedCompare = parseFloat(compareAt);
     const parsedOnSale = onSale === 'true' || onSale === true;
+    const isBestSeller = req.body.isBestSeller === 'true' || req.body.isBestSeller === true ? true : false;
 
     if ([parsedPrice, parsedDelivery, parsedRating, parsedCompare].some(n => Number.isNaN(n)) ||
-        Number.isNaN(parsedReviews)
+      Number.isNaN(parsedReviews)
     ) {
       return res.status(400).json({ success: false, message: 'Price, deliveryCharge, rating, reviews, and compareAt must be numbers.' });
     }
@@ -197,9 +198,9 @@ exports.create = async (req, res) => {
 
     // Parse JSON fields
     let dims = {};
-    try { dims = typeof dimensions === 'string' ? JSON.parse(dimensions) : dimensions; } catch {}
+    try { dims = typeof dimensions === 'string' ? JSON.parse(dimensions) : dimensions; } catch { }
     let wt = {};
-    try { wt = typeof weight === 'string' ? JSON.parse(weight) : weight; } catch {}
+    try { wt = typeof weight === 'string' ? JSON.parse(weight) : weight; } catch { }
     const colorArr = Array.isArray(colors)
       ? colors
       : (typeof colors === 'string' ? colors.split(',').map(s => s.trim()) : []);
@@ -238,7 +239,7 @@ exports.create = async (req, res) => {
       capacity: capacity?.trim(),
       brand: brand?.trim(),
       features: featureArr,
-
+      isBestSeller,
       images: req.files.map(f => ({ data: f.buffer, contentType: f.mimetype })),
     });
 
@@ -302,9 +303,12 @@ exports.update = async (req, res) => {
     const parsedReviews = parseInt(reviews, 10);
     const parsedCompare = parseFloat(compareAt);
     const parsedOnSale = onSale === 'true' || onSale === true;
+    if (req.body.isBestSeller !== undefined) {
+      bc.isBestSeller = req.body.isBestSeller === 'true' || req.body.isBestSeller === true ? true : false;
+    }
 
     if ([parsedPrice, parsedDelivery, parsedRating, parsedCompare].some(n => Number.isNaN(n)) ||
-        Number.isNaN(parsedReviews)
+      Number.isNaN(parsedReviews)
     ) {
       return res.status(400).json({ success: false, message: 'Price, deliveryCharge, rating, reviews, and compareAt must be numbers.' });
     }
@@ -314,9 +318,9 @@ exports.update = async (req, res) => {
 
     // Parse JSON fields
     let dims = {};
-    try { dims = typeof dimensions === 'string' ? JSON.parse(dimensions) : dimensions; } catch {}
+    try { dims = typeof dimensions === 'string' ? JSON.parse(dimensions) : dimensions; } catch { }
     let wt = {};
-    try { wt = typeof weight === 'string' ? JSON.parse(weight) : weight; } catch {}
+    try { wt = typeof weight === 'string' ? JSON.parse(weight) : weight; } catch { }
     const colorArr = Array.isArray(colors)
       ? colors
       : (typeof colors === 'string' ? colors.split(',').map(s => s.trim()) : []);
@@ -390,5 +394,24 @@ exports.delete = async (req, res) => {
   } catch (err) {
     console.error('Error in delete:', err);
     res.status(500).json({ success: false, message: 'Server error deleting collection.' });
+  }
+};
+
+exports.getBestSellers = async (req, res) => {
+  try {
+    const items = await BagCollection.find({ isBestSeller: true })
+      .sort({ updatedAt: -1 })
+      .lean();
+    // convert images to data URIs
+    const results = items.map(o => {
+      const images = o.images.map(img =>
+        `data:${img.contentType};base64,${img.data.toString('base64')}`
+      );
+      return { ...o, images };
+    });
+    res.json({ success: true, items: results });
+  } catch (err) {
+    console.error('Error fetching best sellers:', err);
+    res.status(500).json({ success: false, message: 'Server error' });
   }
 };

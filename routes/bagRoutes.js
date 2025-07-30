@@ -10,5 +10,6 @@ router.post('/create', upload.array('images', 5), ctrl.create);
 router.post('/update', upload.array('images', 5), ctrl.update);
 router.post('/delete', ctrl.delete);
 router.get('/get/:id', ctrl.getById);
+router.get('/best-sellers', ctrl.getBestSellers);
 
 module.exports = router;

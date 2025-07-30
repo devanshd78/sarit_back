@@ -38,6 +38,11 @@ const BagCollectionSchema = new mongoose.Schema({
   capacity:        String,       // e.g. "15L"
   brand:           String,
   features:        [String],     // e.g. ["Water-resistant", "Padded straps"]
+  isBestSeller: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
   images:          [ImageSchema],
 }, { timestamps: true });
 
