@@ -9,7 +9,7 @@ const client = twilio(
   process.env.TWILIO_AUTH_TOKEN
 );
 
-// Helper: generate a 6-digit OTP
+// Helper: generate a 6‑digit OTP
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
@@ -43,7 +43,7 @@ function validateInput(fields, res) {
 }
 
 /**
- * 1) Login/Register and Send OTP
+ * 1) Login / Register and send OTP
  */
 exports.loginOrRegister = async (req, res) => {
   const { email, mobile } = req.body;
@@ -56,7 +56,7 @@ exports.loginOrRegister = async (req, res) => {
     let user = await User.findOne({ email, mobile });
     if (!user) user = await User.create({ email, mobile });
 
-    // Generate OTP and expiry
+    // Generate OTP and expiry (10 minutes)
     const otp = generateOTP();
     user.otp = otp;
     user.otpExpires = Date.now() + 10 * 60 * 1000;
@@ -69,7 +69,8 @@ exports.loginOrRegister = async (req, res) => {
       to: mobile,
     });
 
-    res.json({ message: 'OTP sent to your mobile phone' });
+    // ❯❯❯  Return userId so the client can cache/display it immediately
+    res.json({ message: 'OTP sent to your mobile phone', userId: user._id });
   } catch (err) {
     console.error('Error in loginOrRegister:', err.message);
     res.status(500).json({ error: 'Server error' });
@@ -77,7 +78,7 @@ exports.loginOrRegister = async (req, res) => {
 };
 
 /**
- * 2) Verify OTP and Issue JWT
+ * 2) Verify OTP and issue JWT
  */
 exports.verifyOtp = async (req, res) => {
   const { email, mobile, otp } = req.body;
@@ -91,7 +92,7 @@ exports.verifyOtp = async (req, res) => {
       return res.status(400).json({ error: 'Invalid or expired OTP' });
     }
 
-    // Clear OTP
+    // Clear OTP fields
     user.otp = undefined;
     user.otpExpires = undefined;
     await user.save();
@@ -101,7 +102,8 @@ exports.verifyOtp = async (req, res) => {
       expiresIn: process.env.JWT_EXPIRES_IN,
     });
 
-    res.json({ token });
+    // ❯❯❯  Return userId alongside the token for convenience
+    res.json({ token, userId: user._id });
   } catch (err) {
     console.error('Error in verifyOtp:', err.message);
     res.status(500).json({ error: 'Server error' });
@@ -109,7 +111,7 @@ exports.verifyOtp = async (req, res) => {
 };
 
 /**
- * 3) Middleware: JWT Authentication
+ * 3) Middleware: JWT authentication
  */
 exports.requireAuth = (req, res, next) => {
   const authHeader = req.headers.authorization;
