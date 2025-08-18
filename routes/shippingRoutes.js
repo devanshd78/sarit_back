@@ -1,8 +1,22 @@
-// routes/api/shipping.js
 const express = require('express');
-const router = express.Router();
-const shippingController = require('../controllers/shippingController');
+const {
+  getAvailableMethods,
+  getConfig,
+  updateConfig,
+  resetConfig,
+} = require('../controllers/shippingController');
 
-router.get('/', shippingController.getMethods);
+// Plug your real admin/auth middleware:
+const requireAdmin = (req, res, next) => { next(); };
+
+const router = express.Router();
+
+// Public
+router.get('/available', getAvailableMethods);
+
+// Admin
+router.get('/config', requireAdmin, getConfig);
+router.post('/update', requireAdmin, updateConfig);
+router.post('/reset', requireAdmin, resetConfig);
 
 module.exports = router;

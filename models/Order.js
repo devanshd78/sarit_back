@@ -71,7 +71,7 @@ const OrderSchema = new mongoose.Schema({
   billingAddress: { type: AddressSchema },  // optional if same‑as‑shipping
 
   paymentMethod: { type: String, enum: ['gateway', 'cod'], required: true },
-  // shippingMethod:  { type: ShippingChoiceSchema, required: true },
+  shippingMethod:  { type: ShippingChoiceSchema, required: true },
 
   // Pricing breakdown
   subtotal: { type: Number, required: true }, // before tax & shipping

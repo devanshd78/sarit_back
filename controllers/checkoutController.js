@@ -34,7 +34,7 @@ async function generateOrderId() {
  */
 function validateOrderPayload(body) {
   const errs = [];
-  const { items, form, shippingId, shippingCost } = body;
+  const { items, form, shippingId } = body;
 
   if (!Array.isArray(items) || items.length === 0) errs.push('Cart items are required.');
 
@@ -49,8 +49,7 @@ function validateOrderPayload(body) {
   if (!form?.paymentMethod) errs.push('Payment method is required.');
 
   // Shipping
-  // if (!shippingId) errs.push('shippingId is required.');
-  // if (shippingCost == null) errs.push('shippingCost is required.');
+  if (!shippingId) errs.push('shippingId is required.');
 
   // Billing address when different
   if (!form?.billingSame) {
@@ -74,7 +73,6 @@ exports.createOrder = async (req, res) => {
       items: rawItems,
       form,
       shippingId,
-      shippingCost,
       coupon: couponClient,
       billingAddress: billingRaw,
     } = req.body;
@@ -111,14 +109,13 @@ exports.createOrder = async (req, res) => {
     /* 4. Pricing */
     const subtotal = items.reduce((sum, i) => sum + i.price * i.quantity, 0);
     const taxes = +(subtotal * 0.09).toFixed(2); // Example GST 9%
+    const shipCfg = await ShippingMethod.ensureSingleton();
+    const method = shipCfg.methods.find(m => m.id === String(shippingId));
+    if (!method) {
+      return res.status(400).json({ success: false, message: 'Invalid shippingId. Use "standard" or "express".' });
+    }
+    const shippingCost = Number(method.cost);
     const grossTotal = subtotal + taxes + shippingCost;
-
-    /* Validate shipping method & cost */
-    // const shipDoc = await ShippingMethod.findOne({ country: form.country });
-    // const method = shipDoc?.methods.find(m => m.id === shippingId);
-    // if (!method) return res.status(400).json({ success: false, message: 'Invalid shipping method.' });
-    // if (method.cost !== shippingCost)
-    //   return res.status(400).json({ success: false, message: 'Shipping cost mismatch.' });
 
     /* 5. Coupon */
     let coupon = null;
@@ -181,7 +178,7 @@ exports.createOrder = async (req, res) => {
       shippingAddress,
       billingAddress,
       paymentMethod: form.paymentMethod,
-      // shippingMethod: { id: method.id, label: method.label, cost: method.cost },
+      shippingMethod: { id: method.id, label: method.label, cost: method.cost },
       coupon,
       subtotal,
       taxes,
@@ -232,7 +229,7 @@ exports.createOrder = async (req, res) => {
  * ---------------------------------------------------------------------------*/
 exports.getOrderList = async (req, res) => {
   try {
-    const { page = 1, limit = 20, search = '', status, dateFrom, dateTo } = req.body || {};
+    const { page = 1, limit = 20, search = '', status, dateFrom, dateTo, sortBy } = req.body || {};
 
     const p = Math.max(1, parseInt(page, 10));
     const lim = Math.min(100, Math.max(1, parseInt(limit, 10)));
@@ -250,17 +247,31 @@ exports.getOrderList = async (req, res) => {
     }
 
     const skip = (p - 1) * lim;
-    const [rows, total] = await Promise.all([
+    const [rowsRaw, total] = await Promise.all([
       Order.find(filter).sort({ createdAt: -1 }).skip(skip).limit(lim).lean(),
       Order.countDocuments(filter),
     ]);
 
-    return res.json({ success: true, data: rows, pagination: { total, page: p, pages: Math.ceil(total / lim), limit: lim } });
+    let rows = rowsRaw;
+    if (sortBy === 'shippingPriority') {
+      rows = [...rowsRaw].sort((a, b) => {
+        const ax = a?.shippingMethod?.id === 'express' ? 1 : 0;
+        const bx = b?.shippingMethod?.id === 'express' ? 1 : 0;
+        return bx - ax || +new Date(b.createdAt) - +new Date(a.createdAt);
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: rows,
+      pagination: { total, page: p, pages: Math.ceil(total / lim), limit: lim },
+    });
   } catch (err) {
     console.error('getOrderList error:', err);
     return res.status(500).json({ success: false, message: 'Server error retrieving orders.' });
   }
 };
+
 
 exports.updateOrderStatus = async (req, res) => {
   try {
@@ -269,9 +280,8 @@ exports.updateOrderStatus = async (req, res) => {
       return res.status(400).json({ success: false, message: 'orderId is required.' });
     }
 
-    const filter = { orderId: orderId }
+    const filter = { orderId };
 
-    // Validate status
     const allowed = ['pending', 'paid', 'processing', 'shipped', 'delivered', 'cancelled'];
     if (!allowed.includes(status)) {
       return res.status(400).json({
@@ -280,7 +290,6 @@ exports.updateOrderStatus = async (req, res) => {
       });
     }
 
-    // Perform the update
     const order = await Order.findOneAndUpdate(
       filter,
       { status },
@@ -303,8 +312,8 @@ exports.updateOrderStatus = async (req, res) => {
 };
 
 /** ---------------------------------------------------------------------------
- * POST /orders/get  – Fetch a single order (e.g. for tracking page)
- * Body: { orderId: "<mongodb‑id>" }
+ * POST /checkout/get – Fetch a single order (used by admin modal)
+ * Body: { orderId: "ORDxxxxx" }
  * ---------------------------------------------------------------------------*/
 exports.getOrderById = async (req, res) => {
   try {
@@ -313,11 +322,7 @@ exports.getOrderById = async (req, res) => {
       return res.status(400).json({ success: false, message: 'orderId is required.' });
     }
 
-    // Build filter: try _id first if it's a valid ObjectId
-    let filter;
-    filter = { orderId: orderId };
-
-    // `.lean()` if you don’t need full Mongoose documents
+    const filter = { orderId };
     const order = await Order.findOne(filter).lean();
 
     if (!order) {
@@ -330,4 +335,3 @@ exports.getOrderById = async (req, res) => {
     return res.status(500).json({ success: false, message: 'Server error retrieving order.' });
   }
 };
-
