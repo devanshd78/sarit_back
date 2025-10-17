@@ -20,6 +20,7 @@ const couponRoutes = require('./routes/couponRoutes')
 const stateCityRoutes = require('./routes/stateCityRoutes');
 const newsLetterRoutes = require('./routes/home/newsLetterRoutes');
 const adminRoutes = require('./routes/adminRoutes');
+const recommendationsRoutes = require('./routes/recommendationRoutes');
 
 // Importing the requireAuth middleware for protected routes
 const { requireAuth } = require('./controllers/authController');
@@ -59,7 +60,7 @@ app.use('/api/contact',contactRoutes)
 app.use('/api/coupons',couponRoutes)
 app.use('/api/state', stateCityRoutes)
 app.use('/api/newsLetter', newsLetterRoutes)
-
+app.use('/api/recommendations', recommendationsRoutes);
 
 app.use('/api/admin', adminRoutes);
 

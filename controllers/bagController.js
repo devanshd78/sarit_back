@@ -3,8 +3,11 @@
 const mongoose = require('mongoose');
 const BagCollection = require('../models/Bag');
 
+// Allowed types: 1, 2, 3 (3 = Everyday backpacks)
+const ALLOWED_TYPES = new Set([1, 2, 3]);
+
 /**
- * GET /api/bag-collections?type=<1|2>&availability=<all|in-stock|out-of-stock>&priceSort=<low-high|high-low>
+ * GET /api/bag-collections?type=<1|2|3>&availability=<all|in-stock|out-of-stock>&priceSort=<low-high|high-low>
  */
 exports.getAll = async (req, res) => {
   try {
@@ -14,8 +17,8 @@ exports.getAll = async (req, res) => {
     // Type filter
     if (type !== undefined) {
       const t = parseInt(type, 10);
-      if (![1, 2].includes(t)) {
-        return res.status(400).json({ success: false, message: 'Invalid type; must be 1 or 2.' });
+      if (!ALLOWED_TYPES.has(t)) {
+        return res.status(400).json({ success: false, message: 'Invalid type; must be 1, 2, or 3.' });
       }
       filter.type = t;
     }
@@ -49,7 +52,7 @@ exports.getAll = async (req, res) => {
         description: o.description,
         productDescription: o.productDescription,
         href: o.href,
-        type: o.type,
+        type: o.type, // 1,2,3
         price: o.price,
         compareAt: o.compareAt || 0,
         onSale: Boolean(o.onSale),
@@ -58,6 +61,7 @@ exports.getAll = async (req, res) => {
         deliveryCharge: o.deliveryCharge,
         quantity: o.quantity || 1,
         isBestSeller: o.isBestSeller,
+
         // new fields
         dimensions: o.dimensions || {},
         weight: o.weight || {},
@@ -67,7 +71,7 @@ exports.getAll = async (req, res) => {
         brand: o.brand,
         features: o.features || [],
 
-        images: o.images.map(img =>
+        images: (o.images || []).map(img =>
           `data:${img.contentType};base64,${img.data.toString('base64')}`
         ),
         createdAt: o.createdAt,
@@ -104,7 +108,7 @@ exports.getById = async (req, res) => {
       description: o.description,
       productDescription: o.productDescription,
       href: o.href,
-      type: o.type,
+      type: o.type, // 1,2,3
       price: o.price,
       compareAt: o.compareAt || 0,
       onSale: Boolean(o.onSale),
@@ -122,7 +126,7 @@ exports.getById = async (req, res) => {
       brand: o.brand,
       features: o.features || [],
 
-      images: o.images.map(img =>
+      images: (o.images || []).map(img =>
         `data:${img.contentType};base64,${img.data.toString('base64')}`
       ),
       createdAt: o.createdAt,
@@ -139,7 +143,6 @@ exports.getById = async (req, res) => {
  * POST /api/bag-collections
  * multipart/form-data
  */
-
 exports.create = async (req, res) => {
   try {
     const {
@@ -166,13 +169,14 @@ exports.create = async (req, res) => {
     } = req.body;
 
     // Basic validation
-    if (!title?.trim() ||
+    if (
+      !title?.trim() ||
       !bagName?.trim() ||
       !description?.trim() ||
       !href?.trim() ||
-      !['1', '2'].includes(type)
+      !['1', '2', '3'].includes(type)
     ) {
-      return res.status(400).json({ success: false, message: 'Missing or invalid fields.' });
+      return res.status(400).json({ success: false, message: 'Missing or invalid fields (type must be 1, 2, or 3).' });
     }
     if (!req.files?.length) {
       return res.status(400).json({ success: false, message: 'At least one image file is required.' });
@@ -188,8 +192,7 @@ exports.create = async (req, res) => {
     const isBestSeller = req.body.isBestSeller === 'true' || req.body.isBestSeller === true ? true : false;
 
     if ([parsedPrice, parsedDelivery, parsedRating, parsedCompare].some(n => Number.isNaN(n)) ||
-      Number.isNaN(parsedReviews)
-    ) {
+        Number.isNaN(parsedReviews)) {
       return res.status(400).json({ success: false, message: 'Price, deliveryCharge, rating, reviews, and compareAt must be numbers.' });
     }
     if (parsedRating < 0 || parsedRating > 5) {
@@ -198,9 +201,9 @@ exports.create = async (req, res) => {
 
     // Parse JSON fields
     let dims = {};
-    try { dims = typeof dimensions === 'string' ? JSON.parse(dimensions) : dimensions; } catch { }
+    try { dims = typeof dimensions === 'string' ? JSON.parse(dimensions) : dimensions; } catch {}
     let wt = {};
-    try { wt = typeof weight === 'string' ? JSON.parse(weight) : weight; } catch { }
+    try { wt = typeof weight === 'string' ? JSON.parse(weight) : weight; } catch {}
     const colorArr = Array.isArray(colors)
       ? colors
       : (typeof colors === 'string' ? colors.split(',').map(s => s.trim()) : []);
@@ -215,7 +218,7 @@ exports.create = async (req, res) => {
       description: description.trim(),
       productDescription: productDescription?.trim(),
       href: href.trim(),
-      type: parseInt(type, 10),
+      type: parseInt(type, 10), // now allows 3
       price: parsedPrice,
       compareAt: parsedCompare,
       onSale: parsedOnSale,
@@ -287,8 +290,8 @@ exports.update = async (req, res) => {
     if (!id) {
       return res.status(400).json({ success: false, message: 'ID is required.' });
     }
-    if (!['1', '2'].includes(type)) {
-      return res.status(400).json({ success: false, message: 'Type must be 1 or 2.' });
+    if (!['1', '2', '3'].includes(type)) {
+      return res.status(400).json({ success: false, message: 'Type must be 1, 2, or 3.' });
     }
 
     const bc = await BagCollection.findById(id);
@@ -308,8 +311,7 @@ exports.update = async (req, res) => {
     }
 
     if ([parsedPrice, parsedDelivery, parsedRating, parsedCompare].some(n => Number.isNaN(n)) ||
-      Number.isNaN(parsedReviews)
-    ) {
+        Number.isNaN(parsedReviews)) {
       return res.status(400).json({ success: false, message: 'Price, deliveryCharge, rating, reviews, and compareAt must be numbers.' });
     }
     if (parsedRating < 0 || parsedRating > 5) {
@@ -318,9 +320,9 @@ exports.update = async (req, res) => {
 
     // Parse JSON fields
     let dims = {};
-    try { dims = typeof dimensions === 'string' ? JSON.parse(dimensions) : dimensions; } catch { }
+    try { dims = typeof dimensions === 'string' ? JSON.parse(dimensions) : dimensions; } catch {}
     let wt = {};
-    try { wt = typeof weight === 'string' ? JSON.parse(weight) : weight; } catch { }
+    try { wt = typeof weight === 'string' ? JSON.parse(weight) : weight; } catch {}
     const colorArr = Array.isArray(colors)
       ? colors
       : (typeof colors === 'string' ? colors.split(',').map(s => s.trim()) : []);
@@ -334,7 +336,7 @@ exports.update = async (req, res) => {
     bc.description = description.trim();
     bc.productDescription = productDescription?.trim();
     bc.href = href.trim();
-    bc.type = parseInt(type, 10);
+    bc.type = parseInt(type, 10); // now allows 3
     bc.price = parsedPrice;
     bc.compareAt = parsedCompare;
     bc.onSale = parsedOnSale;
@@ -404,7 +406,7 @@ exports.getBestSellers = async (req, res) => {
       .lean();
     // convert images to data URIs
     const results = items.map(o => {
-      const images = o.images.map(img =>
+      const images = (o.images || []).map(img =>
         `data:${img.contentType};base64,${img.data.toString('base64')}`
       );
       return { ...o, images };

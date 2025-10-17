@@ -10,18 +10,31 @@ const AddressSchema = new mongoose.Schema({
   country: { type: String, trim: true, default: 'India' },
 }, { _id: false });
 
-const UserSchema = new mongoose.Schema({
-  // PHASE 1: only these two are required at signup
-  email:      { type: String, unique: true, sparse: true, lowercase: true, trim: true },
-  mobile:     { type: String, unique: true, sparse: true, trim: true },
+const UserSchema = new mongoose.Schema(
+  {
+    // ✅ PHASE 1 (email-only auth)
+    email: {
+      type: String,
+      required: true,
+      unique: true,
+      lowercase: true,
+      trim: true,
+      index: true,
+    },
 
-  // OTP authentication fields
-  otp:         { type: String, trim: true },
-  otpExpires:  { type: Date },
+    mobile: { type: String, trim: true },
 
-  // PHASE 2: added later
-  username:   { type: String, trim: true, default: '' },
-  address:    { type: AddressSchema, default: {} },
-}, { timestamps: true });
+    otp:        { type: String, trim: true },
+    otpExpires: { type: Date },
+
+    // PHASE 2
+    username: { type: String, trim: true, default: '' },
+    address:  { type: AddressSchema, default: {} },
+  },
+  { timestamps: true }
+);
+
+// Safety: ensure unique index on email exists
+UserSchema.index({ email: 1 }, { unique: true });
 
 module.exports = mongoose.model('User', UserSchema);

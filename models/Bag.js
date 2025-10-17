@@ -23,7 +23,7 @@ const BagCollectionSchema = new mongoose.Schema({
   description:     String,       // short summary
   productDescription: String,    // rich/detailed description
   href:            String,
-  type:            { type: Number, enum: [1, 2], default: 2 },
+  type:            { type: Number, enum: [1, 2, 3], default: 1 },
   price:           Number,
   compareAt:       Number,
   onSale:          { type: Boolean, default: false },

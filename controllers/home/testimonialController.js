@@ -12,15 +12,28 @@ exports.getAllTestimonials = async (req, res) => {
 };
 
 exports.createTestimonial = async (req, res) => {
-  const { quote, author } = req.body;
+  const { quote, author, rating } = req.body;
+
   if (!quote?.trim() || !author?.trim()) {
     return res
       .status(400)
       .json({ success: false, message: 'Quote and author are required.' });
   }
 
+  // rating: required 1–5 (integer)
+  const ratingNum = Number(rating);
+  if (!Number.isFinite(ratingNum) || ratingNum < 1 || ratingNum > 5) {
+    return res
+      .status(400)
+      .json({ success: false, message: 'Rating must be a number between 1 and 5.' });
+  }
+
   try {
-    const newItem = await Testimonial.create({ quote, author });
+    const newItem = await Testimonial.create({
+      quote: quote.trim(),
+      author: author.trim(),
+      rating: Math.round(ratingNum),
+    });
     res.status(201).json({ success: true, item: newItem });
   } catch (err) {
     console.error('Error creating testimonial:', err);

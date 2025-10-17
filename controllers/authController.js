@@ -1,31 +1,33 @@
 require('dotenv').config();
 const jwt = require('jsonwebtoken');
+const nodemailer = require('nodemailer');
 const User = require('../models/User');
-const twilio = require('twilio');
+const path = require('path');
+const fs = require('fs');
 
-// Twilio client
-const client = twilio(
-  process.env.TWILIO_ACCOUNT_SID,
-  process.env.TWILIO_AUTH_TOKEN
-);
+// --- Nodemailer Transporter (Gmail via STARTTLS on 587) ---
+const transporter = nodemailer.createTransport({
+  host: process.env.SMTP_HOST,
+  port: Number(process.env.SMTP_PORT || 587),
+  secure: false, // STARTTLS
+  auth: {
+    user: process.env.SMTP_USER,
+    pass: process.env.SMTP_PASS,
+  },
+});
 
-// Helper: generate a 6‑digit OTP
+// Helper: generate a 6-digit OTP
 function generateOTP() {
   return Math.floor(100000 + Math.random() * 900000).toString();
 }
 
-// Helper: Validate input
+// Helper: Validate input (email + optional otp)
 function validateInput(fields, res) {
   const errors = [];
 
   // Email
   if (!fields.email || !/^\S+@\S+\.\S+$/.test(fields.email)) {
     errors.push({ field: 'email', msg: 'Invalid email' });
-  }
-
-  // Mobile
-  if (!fields.mobile || !/^\+?[1-9]\d{7,14}$/.test(fields.mobile)) {
-    errors.push({ field: 'mobile', msg: 'Invalid mobile number' });
   }
 
   // OTP (only for verifyOtp)
@@ -42,19 +44,85 @@ function validateInput(fields, res) {
   return true;
 }
 
+async function sendOtpEmail(to, otp) {
+  const brand = 'Zexa';
+
+  // Put Logo.jpeg in: backend/assets/Logo.jpeg  (adjust if needed)
+  const logoPath = path.join(__dirname, '..', 'Logo.jpeg');
+  const hasLogo = fs.existsSync(logoPath);
+
+  const html = `
+    <div style="font-family: system-ui, -apple-system, Segoe UI, Roboto, 'Helvetica Neue', Arial, 'Noto Sans', 'Apple Color Emoji', 'Segoe UI Emoji'; padding:24px; color:#111827;">
+      ${hasLogo ? `
+        <div style="margin-bottom:16px;">
+          <img src="cid:brand-logo" alt="${brand} Logo" style="height:48px; width:auto; display:block;" />
+        </div>` : ''
+      }
+      <h2 style="margin:0 0 8px 0;">Your ${brand} verification code</h2>
+      <p style="color:#374151;margin:0 0 16px 0;">Use the code below to finish signing in.</p>
+      <div style="font-size:32px; letter-spacing:8px; font-weight:700; padding:16px 24px; border:1px solid #e5e7eb; border-radius:12px; display:inline-block;">
+        ${otp}
+      </div>
+      <p style="color:#6b7280;margin:16px 0 0 0;">This code expires in 10 minutes. If you didn’t request it, you can ignore this email.</p>
+    </div>
+  `;
+
+  const text = `Your ${brand} verification code is ${otp}.
+This code expires in 10 minutes. If you didn’t request it, you can ignore this email.`;
+
+  await transporter.sendMail({
+    from: `"${brand} Accounts" <${process.env.SMTP_USER}>`,
+    to,
+    subject: `${brand} Verification Code: ${otp}`,
+    html,
+    text,
+    ...(hasLogo && {
+      attachments: [
+        {
+          filename: 'Logo.jpeg',
+          path: logoPath,
+          cid: 'brand-logo', // reference in <img src="cid:brand-logo">
+        },
+      ],
+    }),
+  });
+}
+
 /**
- * 1) Login / Register and send OTP
+ * 1) Login / Register and send OTP (EMAIL ONLY)
+ *    Route: POST /auth/login
+ *    Body: { email }
  */
 exports.loginOrRegister = async (req, res) => {
-  const { email, mobile } = req.body;
+  // normalize email (lowercase/trim)
+  const emailRaw = req.body.email;
+  const email = typeof emailRaw === 'string' ? emailRaw.toLowerCase().trim() : emailRaw;
+  const { mobile } = req.body;
 
-  // Validate inputs
-  if (!validateInput({ email, mobile }, res)) return;
+  if (!validateInput({ email }, res)) return;
+
+  // optional mobile validation (accept E.164 or 10-digit India)
+  if (mobile) {
+    const e164 = /^\+?[1-9]\d{7,14}$/;
+    const in10 = /^\d{10}$/;
+    if (!e164.test(mobile) && !in10.test(mobile)) {
+      return res.status(400).json({ error: 'Invalid mobile number format' });
+    }
+  }
 
   try {
-    // Find or create user
-    let user = await User.findOne({ email, mobile });
-    if (!user) user = await User.create({ email, mobile });
+    // find or create by email only
+    let user = await User.findOne({ email });
+    if (!user) {
+      user = await User.create({
+        email,
+        ...(mobile ? { mobile } : {}),
+      });
+    } else if (mobile && user.mobile !== mobile) {
+      // update/overwrite stored mobile if new one is provided
+      user.mobile = mobile;
+      await user.save();
+    }
 
     // Generate OTP and expiry (10 minutes)
     const otp = generateOTP();
@@ -62,32 +130,37 @@ exports.loginOrRegister = async (req, res) => {
     user.otpExpires = Date.now() + 10 * 60 * 1000;
     await user.save();
 
-    // Send OTP via Twilio SMS
-    await client.messages.create({
-      body: `Your verification code is ${otp}`,
-      from: process.env.TWILIO_PHONE_NUMBER,
-      to: mobile,
-    });
+    // Send OTP via email
+    await sendOtpEmail(email, otp);
 
-    // ❯❯❯  Return userId so the client can cache/display it immediately
-    res.json({ message: 'OTP sent to your mobile phone', userId: user._id });
+    // Return richer payload (include email & mobile)
+    res.json({
+      message: 'OTP sent to your email address',
+      userId: user._id,
+      email: user.email,
+      mobile: user.mobile || null,
+    });
   } catch (err) {
-    console.error('Error in loginOrRegister:', err.message);
+    console.error('Error in loginOrRegister:', err);
     res.status(500).json({ error: 'Server error' });
   }
 };
 
 /**
  * 2) Verify OTP and issue JWT
+ *    Route: POST /auth/verify-otp
+ *    Body: { email, otp }
  */
 exports.verifyOtp = async (req, res) => {
-  const { email, mobile, otp } = req.body;
+  // normalize email
+  const emailRaw = req.body.email;
+  const email = typeof emailRaw === 'string' ? emailRaw.toLowerCase().trim() : emailRaw;
+  const { otp } = req.body;
 
-  // Validate inputs
-  if (!validateInput({ email, mobile, otp }, res)) return;
+  if (!validateInput({ email, otp }, res)) return;
 
   try {
-    const user = await User.findOne({ email, mobile });
+    const user = await User.findOne({ email });
     if (!user || user.otp !== otp || user.otpExpires < Date.now()) {
       return res.status(400).json({ error: 'Invalid or expired OTP' });
     }
@@ -102,10 +175,15 @@ exports.verifyOtp = async (req, res) => {
       expiresIn: process.env.JWT_EXPIRES_IN,
     });
 
-    // ❯❯❯  Return userId alongside the token for convenience
-    res.json({ token, userId: user._id });
+    // Return token + user basics
+    res.json({
+      token,
+      userId: user._id,
+      email: user.email,
+      mobile: user.mobile || null,
+    });
   } catch (err) {
-    console.error('Error in verifyOtp:', err.message);
+    console.error('Error in verifyOtp:', err);
     res.status(500).json({ error: 'Server error' });
   }
 };
